@@ -1,0 +1,6 @@
+venv/
+Wafer_dataset/
+Camera_dataset/
+__pycache__/
+*.pyc
+*.pth
