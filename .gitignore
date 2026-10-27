@@ -4,3 +4,5 @@ Camera_dataset/
 __pycache__/
 *.pyc
 *.pth
+crop_box.json
+check_framing.py
