@@ -6,3 +6,10 @@ __pycache__/
 *.pth
 crop_box.json
 check_framing.py
+calibration_black.jpg
+calibration_debug.jpg
+calibration_demo_check.jpg
+cam_black.jpg
+cam_white.jpg
+cam_check.py
+demo_log.txt
