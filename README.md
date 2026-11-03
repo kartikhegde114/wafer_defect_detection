@@ -1,248 +1,62 @@
-# Wafer-Map Defect Classification with a Live Camera Stream (Luckfox Pico Plus)
+# Wafer-Map Defect Classification with a Live Camera Stream
 
-This project classifies semiconductor wafer-map defect patterns (Center, Donut, Edge Local, Edge Ring, Local, Scratch, Near full, Random, None) with a ResNet18 transfer-learning model trained in Python.
+A Python project that classifies semiconductor wafer-map defect patterns (9 classes) with a ResNet18 model, then tests it on **photos and a live video stream from a Luckfox Pico Plus camera** pointed at a monitor.
 
-- On clean images, the model reaches **86.8% accuracy and 0.865 macro F1** on 136 held-out test images.
-- Seen through a **Luckfox Pico Plus camera** (images shown on a monitor and photographed), a model trained only on clean images drops to **11.8% accuracy**. After fine-tuning on camera photos, it reaches **75.7% accuracy and 0.747 macro F1** on 136 held-out camera test photos.
-- The board streams video over RTSP, and Python with OpenCV reads it at about **20 FPS with roughly 66 ms latency** on a CPU-only Windows PC.
-- A live demo that shows the 136 test images on a monitor and classifies the camera view reached **74.3% accuracy** (79.7% on the 87% of images answered at confidence 0.50 or higher) in one run.
+> **Scope:** 32 x 32 wafer-map pattern images (not SEM or optical inspection images). The model classifies whole images and does not locate defects. The board acts as the camera; the model runs on the PC. This is a learning project, not a production inspection system.
 
-![Clean wafer maps, one per class](sample_images.png)
+![Sample wafer maps, one per class](results/sample_images.png)
 
-> **Scope:** the data are 32 x 32 wafer-map pattern images, not SEM or optical inspection images, and the model classifies whole images instead of locating defects. The board acts as the camera, and the model runs on the PC. This is a learning project, not a production inspection system.
+## Key results
 
----
-
-## 1. Why wafer-map patterns matter
-
-In wafer manufacturing, defects form spatial signatures across the wafer: a ring at the edge, a cluster at the center, a scratch line, random scatter. The pattern points toward the process step or equipment issue behind it, so classifying patterns supports root cause analysis and yield learning. This project is a scaled-down version of that idea.
-
-## 2. Pipeline
-
-```
-Luckfox Pico Plus camera --RTSP--> Windows PC (Python + OpenCV) --> ResNet18 classifier --> class label drawn on live video
-                                        |
-                                        +--> VLC (raw stream view)
-```
-
-## 3. Tools
-
-| Item | Detail |
-|---|---|
-| Language | Python 3 (virtual environment) |
-| Libraries | PyTorch, torchvision, OpenCV, scikit-learn, matplotlib, Pillow, NumPy |
-| Model | ResNet18 pretrained on ImageNet, last layer replaced with 9 outputs |
-| Hardware | Luckfox Pico Plus (RV1103) with camera, connected to the PC over USB |
-| PC | Windows, PowerShell, CPU only |
-
-## 4. Dataset
-
-- Source: **[FILL: dataset name, link and license]**. The images are not included in this repository.
-- **902 images**, 9 classes, about 100 per class, all **32 x 32 pixels, RGB**.
-- Folder layout expected: `Wafer_dataset/<class name>/<image files>`, with no ready-made train/validation/test split.
-
-| Class | Images |
-|---|---|
-| Center | 100 |
-| Donut | 102 |
-| Edge Local | 103 |
-| Edge Ring | 102 |
-| Local | 100 |
-| near full | 95 |
-| none | 100 |
-| random | 100 |
-| Scratch | 100 |
-
-The classes are nearly balanced, so no class-imbalance handling was needed.
-
-## 5. Method on clean images
-
-### Split
-Images are divided into **631 train / 135 validation / 136 test** (70/15/15), stratified so each part keeps the same share of every class (random seed 42). The exact indices are saved in `split.json`, so every script uses the same split.
-
-### Model 1 (`train.py`)
-Images resized to 64 x 64 and normalized for the pretrained model, with random flips and rotation on training images. ResNet18 with a new 9-output layer, Adam optimizer (learning rate 0.001), 15 epochs, batch size 32. Validation accuracy peaked at 86.7%.
-
-### Model 2 (`train2.py`)
-Same split, with three changes: input size 96 x 96, AdamW with learning rate 0.0003 and a cosine schedule, and label smoothing 0.1, for 30 epochs. Validation accuracy peaked at 90.4% and was much steadier between epochs.
-
-The best epoch is always chosen on the validation images only. The test images are used once per model, for final reporting.
-
-## 6. Results on clean images (136 test images)
-
-| Metric | Model 1 (64 px) | Model 2 (96 px) |
+| Setting | Accuracy | Macro F1 |
 |---|---|---|
-| Accuracy | 77.2% (105 of 136) | **86.8%** (118 of 136) |
-| Macro F1 | 0.773 | **0.865** |
+| Clean images, ResNet18 at 96 px (136 test images) | **86.8%** | **0.865** |
+| Camera photos, model trained on clean images only (136 test photos) | 11.8% | 0.037 |
+| Camera photos, after fine-tuning on camera photos (136 test photos) | **75.7%** | **0.747** |
+| Live demo, 136 test images shown on a monitor (one run) | 74.3% | n/a |
 
-| Class | Precision | Recall | F1 (Model 2) | F1 (Model 1) |
-|---|---|---|---|---|
-| Center | 0.929 | 0.867 | 0.897 | 0.769 |
-| Donut | 0.875 | 0.875 | 0.875 | 0.839 |
-| Edge Local | 0.933 | 0.933 | 0.933 | 0.625 |
-| Edge Ring | 0.938 | 0.938 | 0.938 | 0.882 |
-| Local | 0.692 | 0.600 | 0.643 | 0.621 |
-| Scratch | 0.812 | 0.867 | 0.839 | 0.593 |
-| near full | 0.875 | 1.000 | 0.933 | 0.923 |
-| none | 0.938 | 1.000 | 0.968 | 0.966 |
-| random | 0.786 | 0.733 | 0.759 | 0.737 |
+- In the live demo, answers with confidence of 0.50 or higher (87% of the images) were right 79.7% of the time; the other 18 images were marked UNSURE.
+- Live stream speed: about 20 FPS with roughly 66 ms delay on a CPU-only Windows PC.
+- With only 136 test images, each figure is uncertain by roughly plus or minus 7 points.
 
-![Confusion matrix of Model 2 on clean test images](confusion_matrix_v2.png)
+![Confusion matrix after fine-tuning on camera photos](results/confusion_matrix_camera_after.png)
 
-**Analysis**
-- The largest gains came on Edge Local (F1 0.625 to 0.933) and Scratch (0.593 to 0.839), the two classes Model 1 confused most often.
-- For Model 2 the weakest classes are **Local (0.643) and random (0.759)**.
-- Three things changed between the models (resolution, learning-rate schedule, label smoothing), so this experiment cannot say which one caused the gain.
-- With only 136 test images, one accuracy figure is uncertain by roughly plus or minus 6 points.
-- The same test set was used for both models. No tuning was done against it, but it has been seen twice.
-
----
-
-## 7. From clean images to camera photos
-
-### 7.1 Why this step
-A model trained on clean digital images may fail on pictures taken by a camera: blur, different colours, glare and framing all change. To measure this, every dataset image was shown on a monitor and photographed with the Pico Plus camera.
-
-### 7.2 Capture (`capture_camera.py`)
-- The script shows each of the 902 images full screen, waits for the camera to settle, and saves the newest frame.
-- **Calibration:** before capturing, the script shows a white square on a black screen, finds it in the camera picture, and crops exactly that region (128 x 128 pixels saved). The crop box is written to `crop_box.json`, and `calibration_check.jpg` shows it drawn on the camera view.
-- Images are shown in random order, so lighting drift does not line up with one class.
-- The photos keep the same split as the clean images: 631 train / 135 validation / 136 test. The test photos show images the model never trained on.
-
-![Camera view with the calibrated crop box](calibration_check.jpg)
-
-![Camera photos of the displayed wafer maps, three per class](camera_samples.png)
-
-### 7.3 Problems found along the way
-1. **First capture was invalid.** Average brightness was about 120 for every class and the photos differed from the overall average by only 1.0 out of 255, so nearly all photos were the same picture: the camera was not looking at the wafer. A self-test was added, and the capture was repeated.
-2. **Second capture had inconsistent framing.** The wafer sat off-centre or was cut off in many photos, because the crop was a fixed square in the middle of the camera picture and the camera view did not line up with the screen. The calibration step above fixed this.
-3. **The camera still moved slightly during the final capture**, so wafer position varies a little between photos. Training therefore uses random shifts and zoom.
-4. The photos are blurrier and more washed-out blue than the clean images.
-
-Results from the two rejected captures are not reported.
-
-### 7.4 Fine-tuning (`train_camera.py`)
-Starts from the clean-trained `model_v2.pth` and trains on the 631 camera training photos (25 epochs, AdamW, learning rate 0.0001, cosine schedule, label smoothing 0.1). Training photos get random flips, small rotation, shifts up to 12%, zoom from 85% to 115%, brightness, contrast and colour changes, and occasional blur. The best epoch is chosen on the 135 camera validation photos (78.5% accuracy), and the model is then tested once on the 136 camera test photos.
-
-### 7.5 Results on camera test photos (136 photos)
-
-| Model | Accuracy | Macro F1 |
-|---|---|---|
-| Trained on clean images only (`model_v2.pth`) | 11.8% | 0.037 |
-| Fine-tuned on camera photos (`model_camera.pth`) | **75.7%** | **0.747** |
-
-Before fine-tuning, the model labelled almost every camera photo as "Local" (132 of 136), which is close to chance level (11.1% for 9 classes).
-
-![Clean-trained model on camera test photos](confusion_matrix_camera_before.png)
-
-![Fine-tuned model on camera test photos](confusion_matrix_camera_after.png)
-
-| Class | Precision | Recall | F1 |
-|---|---|---|---|
-| Center | 0.714 | 0.667 | 0.690 |
-| Donut | 0.824 | 0.875 | 0.848 |
-| Edge Local | 0.588 | 0.667 | 0.625 |
-| Edge Ring | 0.867 | 0.812 | 0.839 |
-| Local | 0.778 | 0.467 | 0.583 |
-| Scratch | 0.636 | 0.467 | 0.538 |
-| near full | 0.875 | 1.000 | 0.933 |
-| none | 0.750 | 1.000 | 0.857 |
-| random | 0.765 | 0.867 | 0.812 |
-
-**Analysis**
-- Fine-tuning moved the model from nearly always answering "Local" to a clear diagonal in the confusion matrix. Camera test accuracy (75.7%) is about 11 points below the clean-image result (86.8%), so a gap remains.
-- Strongest classes: near full, Donut, Edge Ring, none and random. Weakest: **Scratch (F1 0.538) and Local (0.583)**. Six of the 15 Scratch photos were labelled Edge Local, the same confusion seen on clean images, probably because a streak near the edge looks like an edge cluster at this resolution and blur.
-- Center (F1 0.690) and Edge Local (0.625) are right about two thirds of the time.
-- With 136 test photos, one accuracy figure is uncertain by roughly plus or minus 7 points.
-- These results hold for this camera, this monitor and this lighting. Other cameras or screens were not tested.
-
----
-
-## 8. Live camera pipeline
-
-### Board connection
-1. Connect the Pico Plus to the PC with a USB-C cable. The board is reachable at `172.32.0.93` (check with `ping 172.32.0.93`).
-2. The board's default image already streams the camera over RTSP at `rtsp://172.32.0.93/live/0`. Check it in VLC (Media > Open Network Stream).
-3. The board has no battery clock, so its date resets to 1970 at every power-off, and the burned-in time stamp on the video is wrong. Set it from the PC before a demo:
+## How it works
 
 ```
-$t = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-ssh root@172.32.0.93 "date -s '$t'"
+Luckfox Pico Plus camera --RTSP--> Windows PC (Python + OpenCV) --> ResNet18 --> class label on screen
 ```
 
-### Live classification (`live_classify2.py`)
-For each frame, the script cuts a square from the center (60% of the shorter side), converts BGR to RGB, resizes to 96 x 96, normalizes, runs the model and draws the predicted class and confidence. It averages the last 5 predictions and shows FPS and frame delay. Press `q` to quit.
+1. **Clean images:** train ResNet18 (pretrained on ImageNet) on 902 wafer maps, with a stratified 631 / 135 / 136 split.
+2. **Camera photos:** show every image on a monitor, photograph it with the board camera, and measure how much accuracy is lost. Fine-tune on the camera photos.
+3. **Live demo:** calibrate the crop automatically, show the 136 test images one by one, classify the camera view, and score the answers.
 
-**Problem found: lag and freezing.** The board sends about 25 to 30 frames per second, but CPU inference is slower, so OpenCV's queue of unread frames grew and the picture fell behind.
-**Fix:** a background thread reads the stream continuously and keeps only the newest frame, the decoder is set to low delay, and the stream reconnects automatically.
-**Measured result:** about 20 FPS with roughly 66 ms frame delay on a CPU-only Windows PC.
+## Repository map
 
-### Live demo on the test images (`demo_live.py`)
-`conf_check.py` measured how confident `model_camera.pth` is on the 135 camera validation photos: 0.81 on average when right and 0.57 when wrong. Keeping only answers at confidence 0.50 or higher kept 83% of the photos at 85.7% accuracy, so `CONF_MIN = 0.50` was chosen (on validation photos, not on test images).
+```
+.
+├── README.md             this overview
+├── requirements.txt      Python packages
+├── split.json            saved train / validation / test indices
+├── src/
+│   ├── clean/            clean-image pipeline: dataset checks, training, evaluation
+│   ├── camera/           camera photos: capture, evaluation, fine-tuning, Grad-CAM
+│   └── live/             live stream, live demo, no-wafer test
+├── results/              pictures used in the write-ups
+└── docs/                 detailed write-ups (see below)
+```
 
-`demo_live.py` then runs the whole chain live:
-1. It shows a black screen, then a screen with a white square, and finds the square in the camera picture by subtracting the two camera frames. This sets the crop automatically each run.
-2. It shows each of the 136 test wafer images on the monitor, one at a time.
-3. The Pico Plus camera sees the screen, the calibrated crop is cut out, and `model_camera.pth` predicts. The screen shows the true class, the prediction, the confidence, and CORRECT, WRONG or UNSURE (confidence below 0.50).
+## Detailed write-ups
 
-**Result of one run (136 test images, camera slightly disturbed during the run):**
-
-| Measure | Value |
+| Document | What it covers |
 |---|---|
-| Accuracy if every image gets an answer | 74.3% (101 of 136) |
-| Images answered at confidence 0.50 or higher | 118 (87%) |
-| Accuracy on the answered images | 79.7% (94 of 118) |
-| Marked UNSURE | 18 |
+| [docs/clean_images.md](docs/clean_images.md) | Dataset, split, both models, per-class results |
+| [docs/camera_experiments.md](docs/camera_experiments.md) | Camera capture and calibration, problems found, fine-tuning, Grad-CAM |
+| [docs/live_demo.md](docs/live_demo.md) | Board connection, live stream, confidence limit, live demo results, no-wafer test |
 
-This is close to the 75.7% measured on saved camera photos of the same test images. With 136 images, each figure is uncertain by roughly plus or minus 7 points, and this was a single run, so run-to-run variation is not known. The 136 test images have now been used for several evaluations (clean images, saved camera photos, live demo), although no setting was tuned on them.
+## Quick start
 
-### Known issue: the model has no "not a wafer" answer
-Pointed at a dark, switched-off monitor, the live window showed "Local 56%". The model must choose one of its 9 classes for any picture. `ood_test.py` feeds both models five pictures with no wafer (black, dark grey, mid grey, white, random noise). The clean-trained `model_v2.pth` answered **Local with 57% to 66% confidence on all five**, so "Local" is its fallback for anything unfamiliar. The camera-fine-tuned `model_camera.pth` was much less certain: its top guess was only 15% to 25% in each case, and the top class varied (Local, Scratch, random). A confidence limit therefore behaves differently for the two models: a limit of 0.60 would still let four of the five empty pictures through for `model_v2.pth`, and reject all five for `model_camera.pth`. These are five synthetic pictures, not real photos of an empty screen or room, so the result is only a first indication. A proper fix is a "no wafer" class.
-
-## 9. Limitations
-
-- Small dataset (902 images, 136 for testing), so results have wide uncertainty.
-- Very low image resolution (32 x 32).
-- Wafer-map pattern images, not real inspection images.
-- Camera results come from one camera, one monitor and similar lighting, and the camera moved slightly during capture.
-- The live demo was run once, with the camera slightly disturbed, so run-to-run variation is unknown. It reuses the 136 test images shown on a monitor, not new wafers.
-- No "no wafer" class.
-- One train/validation/test split; no cross-validation.
-- The board only streams video; the model does not run on its NPU.
-
-## 10. Planned work
-
-1. Repeat the live demo a few times with a firmly mounted camera to see run-to-run variation, and add a short recorded clip.
-2. A second capture session with different lighting and camera positions, to test whether more variety improves the weak classes (Scratch, Local, Edge Local).
-3. Add a "no wafer" class.
-4. Optional: convert the model to INT8 with RKNN-Toolkit2 and run it on the board's NPU.
-
-## 11. Repository structure
-
-```
-check_dataset.py       count images per class
-inspect_images.py      check image size and colour, make sample_images.png
-train.py               first training run (64 px), writes split.json and model_best.pth
-evaluate.py            first test-set evaluation
-train2.py              second training run (96 px), writes model_v2.pth
-evaluate2.py           second test-set evaluation, writes confusion_matrix_v2.png
-capture_camera.py      show each dataset image on screen and photograph it with the board camera
-check_camera_photos.py brightness statistics and a picture grid of the camera photos
-eval_camera.py         test a model on the camera test photos
-train_camera.py        fine-tune on camera photos, before/after evaluation
-stream_test.py         open the board's RTSP stream in OpenCV
-live_classify.py       first live classifier (lags)
-live_classify2.py      live classifier with newest-frame reader (uses the clean-trained model)
-conf_check.py          confidence statistics on the camera validation photos
-demo_live.py           live demo: show test images on screen, photograph, classify, score
-ood_test.py            test the model on pictures with no wafer
-split.json             saved train/validation/test indices
-requirements.txt
-```
-
-The dataset, the camera photos, model files (`*.pth`) and the virtual environment are not stored in the repository.
-
-## 12. How to run
+Run every command from the project root (the folder with `README.md`).
 
 ```
 python -m venv venv
@@ -250,31 +64,25 @@ python -m venv venv
 pip install -r requirements.txt
 
 # put the dataset in Wafer_dataset\<class name>\ first
-python check_dataset.py
-python train.py
-python train2.py
-python evaluate2.py
+python src\clean\train2.py
+python src\clean\evaluate2.py
 
-# with the Pico Plus connected, streaming, and mounted facing the monitor:
-python capture_camera.py
-python eval_camera.py
-python train_camera.py
-python conf_check.py
-python demo_live.py
+# with the Pico Plus connected, streaming, and firmly mounted facing the monitor:
+python src\camera\capture_camera.py
+python src\camera\train_camera.py
+python src\live\demo_live.py
 ```
 
-`requirements.txt`:
+## Dataset
 
-```
-torch
-torchvision
-opencv-python
-scikit-learn
-matplotlib
-Pillow
-numpy
-```
+Source: **[FILL: dataset name, link and license]**. The images are not included in this repository. 902 images, 9 classes (Center, Donut, Edge Local, Edge Ring, Local, Scratch, near full, none, random), about 100 per class, 32 x 32 pixels, RGB.
 
-## 13. Skills demonstrated
+## Main limitations
 
-Dataset inspection, stratified splitting, CNN transfer learning, data augmentation, model evaluation (accuracy, macro F1, per-class metrics, confusion matrix), error analysis, measuring and closing a domain gap (clean images vs camera photos), automatic calibration, RTSP video streaming, real-time inference with OpenCV, debugging stream latency, honest reporting of limitations.
+- Small dataset (902 images, 136 for testing) at very low resolution (32 x 32).
+- Camera results come from one camera, one monitor and similar lighting, and the camera moved slightly during capture.
+- The live demo was run once and reuses the test images shown on a monitor, so it is not a test on new wafers.
+- The model has no "no wafer" answer and always picks one of its 9 classes.
+- The model does not run on the board's NPU; the board only streams video.
+
+The full list is in the write-ups above.
